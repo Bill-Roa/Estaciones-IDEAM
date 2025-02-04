@@ -1,0 +1,58 @@
+import pandas as pd
+import os
+import tkinter as tk
+from tkinter import filedialog
+
+def combinar_csv_y_generar_pivot(rutas_entrada, ruta_salida):
+    # Lista para almacenar los DataFrames
+    dfs = []
+
+    # Leer y combinar todos los archivos CSV
+    for ruta in rutas_entrada:
+        df = pd.read_csv(ruta)  # Leer CSV
+        df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")  # Convertir fecha a datetime
+        df["Año"] = df["Fecha"].dt.year  # Extraer el año
+        dfs.append(df)
+
+    # Combinar todos los DataFrames en uno solo
+    df_combined = pd.concat(dfs, ignore_index=True)
+
+    # Crear la tabla dinámica con las columnas en el orden correcto
+    pivot_table = df_combined.pivot_table(
+        index="Año",
+        values="Valor",
+        aggfunc={"Valor": ["max", "count"]}  # Máximo y Recuento
+    ).reset_index()
+
+    # Renombrar las columnas para claridad
+    pivot_table.columns = ["Año", "Recuento", "Valor Máximo"]
+
+    # Guardar el archivo Excel
+    with pd.ExcelWriter(ruta_salida, engine="xlsxwriter") as writer:
+        df_combined.to_excel(writer, sheet_name="Datos Combinados", index=False)
+        pivot_table.to_excel(writer, sheet_name="Tabla Dinámica", index=False)
+
+    print(f"Archivo guardado en: {ruta_salida}")
+
+# Ejemplo de uso:
+# Crear una ventana de Tkinter oculta
+root = tk.Tk()
+root.withdraw()
+
+# Seleccionar archivos CSV de entrada
+rutas_entrada = filedialog.askopenfilenames(
+    title="Selecciona los archivos CSV",
+    filetypes=[("CSV files", "*.csv")],
+    initialdir=os.path.expanduser("~")
+)
+
+# Seleccionar la carpeta de salida
+ruta_salida = filedialog.asksaveasfilename(
+    title="Guardar archivo Excel como",
+    defaultextension=".xlsx",
+    filetypes=[("Excel files", "*.xlsx")],
+    initialdir=os.path.expanduser("~")
+)
+
+# Llamar a la función con las rutas seleccionadas
+combinar_csv_y_generar_pivot(rutas_entrada, ruta_salida)
