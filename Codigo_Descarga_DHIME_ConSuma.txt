@@ -1,0 +1,137 @@
+import pandas as pd
+import os
+
+def combinar_csv_y_generar_pivot(rutas_entrada, ruta_salida, calcular_suma):
+    try:
+        # Lista para almacenar los DataFrames
+        dfs = []
+
+        # Leer y combinar todos los archivos CSV
+        for ruta in rutas_entrada:
+            try:
+                df = pd.read_csv(ruta)  # Leer CSV
+                print(f"📂 Leyendo archivo: {ruta}")
+
+                # Convertir la columna de fechas
+                df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce')
+                if df['Fecha'].isnull().any():
+                    print(f"⚠️ No se pudo convertir algunas fechas en el archivo: {ruta}")
+
+                # Eliminar filas con fechas o valores inválidos
+                df = df.dropna(subset=["Fecha", "Valor"])
+                print(f"🔍 Filas después de eliminar fechas o valores inválidos: {len(df)}")
+
+                # Asegurarse de que "Valor" sea numérico
+                df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce")
+                df = df.dropna(subset=["Valor"])
+
+                # Verificar si quedan filas después de la depuración
+                if df.empty:
+                    print(f"⚠️ Todas las filas fueron eliminadas después de la depuración en el archivo: {ruta}")
+                else:
+                    # Extraer el año de la fecha
+                    df["Año"] = df["Fecha"].dt.year
+                    dfs.append(df)
+            except Exception as e:
+                print(f"⚠️ Error procesando el archivo {ruta}: {e}")
+        
+        # Combinar todos los DataFrames en uno solo
+        if not dfs:
+            raise ValueError("No se pudieron procesar archivos CSV válidos.")
+        
+        df_combined = pd.concat(dfs, ignore_index=True)
+        print(f"📊 Total de filas combinadas: {len(df_combined)}")
+
+        # Crear la tabla dinámica con las columnas en el orden correcto
+        agg_funcs = {"Valor": ["max", "count"]}
+        if calcular_suma:
+            agg_funcs["Valor"].append("sum")
+
+        pivot_table = df_combined.pivot_table(
+            index="Año",
+            values="Valor",
+            aggfunc=agg_funcs  # Máximo, Recuento y opcionalmente Suma
+        ).reset_index()
+
+        # Renombrar las columnas dinámicamente para evitar conflictos
+        if calcular_suma and len(pivot_table.columns) == 4:
+            pivot_table.columns = ["Año", "Recuento", "Valor Máximo", "Acumulado"]
+        elif len(pivot_table.columns) == 3:
+            pivot_table.columns = ["Año", "Recuento", "Valor Máximo"]
+
+        # Guardar el archivo Excel
+        with pd.ExcelWriter(ruta_salida, engine="xlsxwriter") as writer:
+            df_combined.to_excel(writer, sheet_name="Datos Combinados", index=False)
+            pivot_table.to_excel(writer, sheet_name="Tabla Dinámica", index=False)
+
+        print(f"✅ Archivo guardado en: {ruta_salida}")
+
+    except Exception as e:
+        raise Exception(f"Error procesando estación con salida '{ruta_salida}': {e}")
+
+def procesar_varias_estaciones(estaciones):
+    estaciones_fallidas = []
+
+    # Preguntar al usuario si desea calcular la suma de los valores por año
+    calcular_suma = input("¿Deseas calcular la suma de los valores por año además del recuento y valor máximo? (S/N): ").strip().upper() == "S"
+
+    for estacion, info in estaciones.items():
+        print(f"🔄 Procesando estación: {estacion}")
+        rutas_entrada = info["rutas_csv"]
+        ruta_salida = info["ruta_salida"]
+
+        try:
+            combinar_csv_y_generar_pivot(rutas_entrada, ruta_salida, calcular_suma)
+        except Exception as e:
+            print(f"❌ Falló la estación '{estacion}': {e}")
+            estaciones_fallidas.append(estacion)
+    
+    # Reportar estaciones fallidas
+    if estaciones_fallidas:
+        print("\n⚠️ Estaciones con errores:")
+        for estacion in estaciones_fallidas:
+            print(f"- {estacion}")
+    else:
+        print("\n✅ Todas las estaciones procesadas con éxito.")
+
+
+# Ejemplo de uso
+estaciones = {
+    "Montería": {
+        "rutas_csv": [
+            r"C:\Users\atehy\Downloads\Caudales\Monteria [13067020]\Monteria_1986-1995.csv",
+            r"C:\Users\atehy\Downloads\Caudales\Monteria [13067020]\Monteria_1996-2024.csv"
+        ],
+        "ruta_salida": r"C:\Users\atehy\Downloads\Caudales\Monteria [13067020]\Monteria.xlsx"
+    },
+    "El_Monton": {
+        "rutas_csv": [
+            r"C:\Users\atehy\Downloads\Caudales\El Monton [13077300]\El_Monton_1991-1995.csv",
+            r"C:\Users\atehy\Downloads\Caudales\El Monton [13077300]\El_Monton_1996-2024.csv"
+        ],
+        "ruta_salida": r"C:\Users\atehy\Downloads\Caudales\El Monton [13077300]\El_Monton.xlsx"
+    },
+    "Nueva_Colombia": {
+        "rutas_csv": [
+            r"C:\Users\atehy\Downloads\Caudales\Nueva Colombia [13057010]\Nueva_Colombia_1991-1995.csv",
+            r"C:\Users\atehy\Downloads\Caudales\Nueva Colombia [13057010]\Nueva_Colombia_1996-2024.csv"
+        ],
+        "ruta_salida": r"C:\Users\atehy\Downloads\Caudales\Nueva Colombia [13057010]\Nueva_Colombia.xlsx"
+    },
+    "Santa_Helena": {
+        "rutas_csv": [
+            r"C:\Users\atehy\Downloads\Caudales\Santa Helena [13067030]\Santa_Helena_1991-1995.csv",
+            r"C:\Users\atehy\Downloads\Caudales\Santa Helena [13067030]\Santa_Helena_1996-2024.csv"
+        ],
+        "ruta_salida": r"C:\Users\atehy\Downloads\Caudales\Santa Helena [13067030]\Santa_Helena.xlsx"
+    },
+    "Sabana_Nueva": {
+        "rutas_csv": [
+            r"C:\Users\atehy\Downloads\Caudales\Sabana Nueva  [13077010]\Sabana_Nueva_1991-1995.csv",
+            r"C:\Users\atehy\Downloads\Caudales\Sabana Nueva  [13077010]\Sabana_Nueva_1996-2024.csv"
+        ],
+        "ruta_salida": r"C:\Users\atehy\Downloads\Caudales\Sabana Nueva  [13077010]\Sabana_Nueva.xlsx"
+    }
+}
+
+procesar_varias_estaciones(estaciones)
